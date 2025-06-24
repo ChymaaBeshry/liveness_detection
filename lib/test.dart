@@ -121,32 +121,6 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
     )];
   }
 
-  double calcAvg(List<double> list) {
-    double sum = 0;
-    list.forEach((i) {
-      sum += i;
-    });
-    return sum / list.length;
-  }
-
-  int detectSmileChangeFrame(List<double> smileList, {double threshold = 0.2}) {
-    for (int i = 1; i < smileList.length; i++) {
-      if ((smileList[i] - smileList[i - 1]).abs() > threshold) {
-        return i; // frame number where significant change happened
-      }
-    }
-    return -1; // no change detected
-  }
-  //img
-  //z smile=> 0.10   - f=> -1
-  //s smile=> (0.33 - 0.20)   -  f=> 6
-  //b smile=> (0.99 ) -  f=> -1
-
-  //per
-  //s smile=> (0.33 - 0.20)   -  f=> 6
-  //z smill=> 0.010  -  f=> 2
-  //b smile=> (0.2727 - 0.30) -  f=> 4
-
   bool passedLivenessConditions(
     List<double> leftEye,
     List<double> rightEye,
@@ -202,7 +176,6 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
           headEulerAngleY = face.headEulerAngleY;
           isFaceCentered = centered;
         });
-        // print('smile:${smilingProbability.toString().padLeft(5)} ');
 
         if (!isFaceCentered) return;
 
@@ -295,11 +268,6 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
           if (elapsed >= 5) {
             isVerifying = false;
             verificationComplete = true;
-            print('===== All Probabilities over 5 seconds =====');
-            print('Smile List: $smileList');
-            print('Smile avg: ${calcAvg(smileList)}');
-            print('Smile frame: ${detectSmileChangeFrame(smileList)}');
-            print('============================================');
 
             final eyeMoved =
                 hasVariation(leftEyeList) || hasVariation(rightEyeList);
@@ -634,9 +602,3 @@ class HeadMaskPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
-
-
-
-// 1- calc proba
-//2- get diffrences 
-//3- kam frame 
