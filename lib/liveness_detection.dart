@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:camera/camera.dart';
+import 'package:liveness_detection/liveness_analyzer.dart';
 
 enum LivenessChallenge {
   smile,
@@ -57,12 +58,16 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
   double? _initialLeftEye;
   double? _initialRightEye;
   double? _initialHeadY;
+  double? _initialHeadX;
+  double? _initialHeadZ;
   double? _initialSmile;
 
   List<double> smileList = [];
   List<double> leftEyeList = [];
   List<double> rightEyeList = [];
   List<double> headYList = [];
+  List<double> headxList = [];
+  List<double> headzList = [];
   File? imgFile;
   @override
   void initState() {
@@ -126,16 +131,16 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
     list.forEach((i) {
       sum += i;
     });
-    return sum / list.length;
+    return double.parse((sum / list.length).toString().substring(0, 4));
   }
 
-  int detectSmileChangeFrame(List<double> smileList, {double threshold = 0.2}) {
-    for (int i = 1; i < smileList.length; i++) {
-      if ((smileList[i] - smileList[i - 1]).abs() > threshold) {
+  int detectChangeFrame(List<double> List, {double threshold = 0.2}) {
+    for (int i = 1; i < List.length; i++) {
+      if ((List[i] - List[i - 1]).abs() > threshold) {
         return i; // frame number where significant change happened
       }
     }
-    return -1; // no change detected
+    return 0; // no change detected
   }
   //img
   //z smile=> 0.10   - f=> -1
@@ -202,7 +207,6 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
           headEulerAngleY = face.headEulerAngleY;
           isFaceCentered = centered;
         });
-        // print('smile:${smilingProbability.toString().padLeft(5)} ');
 
         if (!isFaceCentered) return;
 
@@ -210,10 +214,14 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
           if (_initialLeftEye == null &&
               _initialRightEye == null &&
               _initialHeadY == null &&
+              _initialHeadX == null &&
+              _initialHeadZ == null &&
               _initialSmile == null) {
             _initialLeftEye = face.leftEyeOpenProbability ?? 0;
             _initialRightEye = face.rightEyeOpenProbability ?? 0;
             _initialHeadY = face.headEulerAngleY ?? 0;
+            _initialHeadX = face.headEulerAngleX ?? 0;
+            _initialHeadZ = face.headEulerAngleZ ?? 0;
             _initialSmile = face.smilingProbability ?? 0;
             verificationStartTime = DateTime.now();
           }
@@ -267,7 +275,7 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
           }
 
           if (challengePassed) {
-            print("-----iam here");
+            print("----- Challenge passed");
             await takePhoto();
             if (mounted) Navigator.pop(context, imgFile);
           }
@@ -282,43 +290,71 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
           leftEyeList.clear();
           rightEyeList.clear();
           headYList.clear();
+          headxList.clear();
+          headzList.clear();
         }
 
         if (isVerifying && !verificationComplete) {
-          smileList.add(face.smilingProbability ?? 0);
-          leftEyeList.add(face.leftEyeOpenProbability ?? 0);
-          rightEyeList.add(face.rightEyeOpenProbability ?? 0);
-          headYList.add(face.headEulerAngleY ?? 0);
+          smileList.add(
+            double.tryParse(face.smilingProbability!.toStringAsFixed(3)) ?? 0,
+          );
+          leftEyeList.add(
+            double.tryParse(face.leftEyeOpenProbability!.toStringAsFixed(3)) ??
+                0,
+          );
+          rightEyeList.add(
+            double.tryParse(face.rightEyeOpenProbability!.toStringAsFixed(3)) ??
+                0,
+          );
+          headYList.add(
+            double.tryParse(face.headEulerAngleY!.toStringAsFixed(3)) ?? 0,
+          );
+          headxList.add(
+            double.tryParse(face.headEulerAngleX!.toStringAsFixed(3)) ?? 0,
+          );
+          headzList.add(
+            double.tryParse(face.headEulerAngleZ!.toStringAsFixed(3)) ?? 0,
+          );
 
           final elapsed =
               DateTime.now().difference(verificationStartTime!).inSeconds;
           if (elapsed >= 5) {
             isVerifying = false;
             verificationComplete = true;
-            print('===== All Probabilities over 5 seconds =====');
-            print('Smile List: $smileList');
-            print('Smile avg: ${calcAvg(smileList)}');
-            print('Smile frame: ${detectSmileChangeFrame(smileList)}');
-            print('============================================');
 
-            final eyeMoved =
-                hasVariation(leftEyeList) || hasVariation(rightEyeList);
-            final smileChanged = hasVariation(smileList);
-            //final headMoved = hasVariation(headYList);
-            final smoothedHeadYList = smoothList(headYList);
-            final headMoved = hasHeadMoved(smoothedHeadYList);
+            final analyzer = LivenessAnalyzer();
+            final isReal = analyzer.analyze(
+              smileList: smileList,
+              leftEyeList: leftEyeList,
+              rightEyeList: rightEyeList,
+              headYList: headYList,
+              headXList: headxList,
+              headZList: headzList,
+            );
 
-            final passedConditions =
-                [eyeMoved, smileChanged, headMoved].where((v) => v).length;
+            debugPrint('Analyzer Result: $isReal');
+            debugPrint(
+              'Analyzer STD → Smile: ${analyzer.calcStd(smileList).toStringAsFixed(3)}, '
+              'LeftEye: ${analyzer.calcStd(leftEyeList).toStringAsFixed(3)}, '
+              'RightEye: ${analyzer.calcStd(rightEyeList).toStringAsFixed(3)}, '
+              'HeadY: ${analyzer.calcStd(headYList).toStringAsFixed(3)}, '
+              'HeadX: ${analyzer.calcStd(headxList).toStringAsFixed(3)}, '
+              'HeadZ: ${analyzer.calcStd(headzList).toStringAsFixed(3)}',
+            );
 
-            if (passedConditions >= 2) {
+            debugPrint(
+              'Analyzer Changes → Smile: ${analyzer.countChangeFrames(smileList, threshold: analyzer.smileFrameChangeThreshold)}, '
+              'LeftEye: ${analyzer.countChangeFrames(leftEyeList, threshold: analyzer.eyeFrameChangeThreshold)}, '
+              'RightEye: ${analyzer.countChangeFrames(rightEyeList, threshold: analyzer.eyeFrameChangeThreshold)}, '
+              'HeadY: ${analyzer.countChangeFrames(headYList, threshold: analyzer.headYFrameChangeThreshold)}, '
+              'HeadX: ${analyzer.countChangeFrames(headxList, threshold: analyzer.headXFrameChangeThreshold)}, '
+              'HeadZ: ${analyzer.countChangeFrames(headzList, threshold: analyzer.headZFrameChangeThreshold)}',
+            );
+
+            if (isReal) {
               await takePhoto();
               verificationPassed = true;
             }
-
-            debugPrint(
-              'Eye moved: $eyeMoved, Smile changed: $smileChanged, Head moved: $headMoved',
-            );
 
             setState(() {});
             await Future.delayed(const Duration(seconds: 1));
@@ -334,6 +370,8 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
                 _initialLeftEye = null;
                 _initialRightEye = null;
                 _initialHeadY = null;
+                _initialHeadX = null;
+                _initialHeadZ = null;
                 _initialSmile = null;
                 verificationStartTime = DateTime.now();
                 setState(() {});
@@ -351,7 +389,7 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
         setState(() => isFaceCentered = false);
       }
     } catch (e) {
-      debugPrint('Error in face detection: \$e');
+      debugPrint('Error in face detection: $e');
     }
   }
 
