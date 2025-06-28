@@ -216,134 +216,7 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
         if (!isFaceCentered) return;
 
         if (challengeMode && selectedChallenge != null && !challengePassed) {
-          if (_initialLeftEye == null &&
-              _initialRightEye == null &&
-              _initialHeadY == null &&
-              _initialHeadX == null &&
-              _initialHeadZ == null &&
-              _initialSmile == null) {
-            _initialLeftEye = face.leftEyeOpenProbability ?? 0;
-            _initialRightEye = face.rightEyeOpenProbability ?? 0;
-            _initialHeadY = face.headEulerAngleY ?? 0;
-            _initialHeadX = face.headEulerAngleX ?? 0;
-            _initialHeadZ = face.headEulerAngleZ ?? 0;
-            _initialSmile = face.smilingProbability ?? 0;
-            verificationStartTime = DateTime.now();
-            cleanChallenge();
-          }
-
-          final elapsed =
-              DateTime.now().difference(verificationStartTime!).inSeconds;
-          if (elapsed >= 5) {
-            Navigator.pop(context, null);
-            return;
-          }
-
-          switch (selectedChallenge!) {
-            case LivenessChallenge.blink:
-              final left = face.leftEyeOpenProbability ?? 0;
-              final right = face.rightEyeOpenProbability ?? 0;
-              leftEyeChallengeList.add(left);
-              rightEyeChallengeList.add(right);
-
-              if (leftEyeChallengeList.length >= 5 &&
-                  rightEyeChallengeList.length >= 5) {
-                final leftChanged = hasSignificantTemporalVariation(
-                  leftEyeChallengeList,
-                );
-                final rightChanged = hasSignificantTemporalVariation(
-                  rightEyeChallengeList,
-                );
-
-                final eyesClosed = (left < 0.3 || right < 0.3);
-                final wasOpenBefore =
-                    (_initialLeftEye! > 0.6 && _initialRightEye! > 0.6);
-
-                if (eyesClosed &&
-                    wasOpenBefore &&
-                    (leftChanged || rightChanged)) {
-                  challengePassed = true;
-                }
-              }
-              break;
-
-            case LivenessChallenge.turnHeadLeft:
-              final headY = face.headEulerAngleY ?? 0;
-              headYChallengeList.add(headY);
-
-              if (headYChallengeList.length >= 5) {
-                final moved = hasSignificantTemporalVariation(
-                  headYChallengeList,
-                );
-                if ((_initialHeadY ?? 0) - headY > 10 && moved) {
-                  challengePassed = true;
-                }
-              }
-              break;
-
-            case LivenessChallenge.turnHeadRight:
-              final headY = face.headEulerAngleY ?? 0;
-              headYChallengeList.add(headY);
-
-              if (headYChallengeList.length >= 5) {
-                final moved = hasSignificantTemporalVariation(
-                  headYChallengeList,
-                );
-                if (headY - (_initialHeadY ?? 0) > 10 && moved) {
-                  challengePassed = true;
-                }
-              }
-              break;
-
-            case LivenessChallenge.smile:
-              final smile = face.smilingProbability ?? 0;
-              smileChallengeList.add(smile);
-
-              if (smileChallengeList.length >= 5) {
-                final changed = hasSignificantTemporalVariation(
-                  smileChallengeList,
-                );
-                if (smile > 0.7 && changed) {
-                  challengePassed = true;
-                }
-              }
-              break;
-
-            case LivenessChallenge.rightEyeWink:
-              final right = face.rightEyeOpenProbability ?? 0;
-              rightEyeChallengeList.add(right);
-
-              if (rightEyeChallengeList.length >= 5) {
-                final changed = hasSignificantTemporalVariation(
-                  rightEyeChallengeList,
-                );
-                if ((_initialRightEye ?? 1.0) > 0.5 && right < 0.3 && changed) {
-                  challengePassed = true;
-                }
-              }
-              break;
-
-            case LivenessChallenge.leftEyeWink:
-              final left = face.leftEyeOpenProbability ?? 0;
-              leftEyeChallengeList.add(left);
-
-              if (leftEyeChallengeList.length >= 5) {
-                final changed = hasSignificantTemporalVariation(
-                  leftEyeChallengeList,
-                );
-                if ((_initialLeftEye ?? 1.0) > 0.5 && left < 0.3 && changed) {
-                  challengePassed = true;
-                }
-              }
-              break;
-          }
-
-          if (challengePassed) {
-            print("----- Challenge passed");
-            await takePhoto();
-            if (mounted) Navigator.pop(context, imgFile);
-          }
-
+          handleChallenge(face);
           return;
         }
 
@@ -441,9 +314,9 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
                 setState(() {});
               } else {
                 await Future.delayed(const Duration(seconds: 1));
+
                 setState(() {
-                  verificationComplete = false;
-                  isVerifying = false;
+                  resetVerificationState(); // ✅ هنا
                 });
               }
             }
@@ -454,6 +327,112 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
       }
     } catch (e) {
       debugPrint('Error in face detection: $e');
+    }
+  }
+
+  void handleChallenge(Face face) async {
+    // أول مرة يتم فيها تسجيل القيم الابتدائية
+    if (_initialLeftEye == null &&
+        _initialRightEye == null &&
+        _initialHeadY == null &&
+        _initialHeadX == null &&
+        _initialHeadZ == null &&
+        _initialSmile == null) {
+      _initialLeftEye = face.leftEyeOpenProbability ?? 0;
+      _initialRightEye = face.rightEyeOpenProbability ?? 0;
+      _initialHeadY = face.headEulerAngleY ?? 0;
+      _initialHeadX = face.headEulerAngleX ?? 0;
+      _initialHeadZ = face.headEulerAngleZ ?? 0;
+      _initialSmile = face.smilingProbability ?? 0;
+      verificationStartTime = DateTime.now();
+      cleanChallenge();
+    }
+
+    final elapsed = DateTime.now().difference(verificationStartTime!).inSeconds;
+    if (elapsed >= 5) {
+      Navigator.pop(context, null);
+      return;
+    }
+
+    switch (selectedChallenge!) {
+      case LivenessChallenge.blink:
+        final left = face.leftEyeOpenProbability ?? 0;
+        final right = face.rightEyeOpenProbability ?? 0;
+        leftEyeChallengeList.add(left);
+        rightEyeChallengeList.add(right);
+
+        final eyesClosed = (left < 0.3 || right < 0.3);
+        final wasOpenBefore =
+            (_initialLeftEye! > 0.6 && _initialRightEye! > 0.6);
+        final leftChanged = hasSignificantTemporalVariation(
+          leftEyeChallengeList,
+        );
+        final rightChanged = hasSignificantTemporalVariation(
+          rightEyeChallengeList,
+        );
+
+        if (eyesClosed && wasOpenBefore && (leftChanged || rightChanged)) {
+          challengePassed = true;
+        }
+        break;
+
+      case LivenessChallenge.smile:
+        final smile = face.smilingProbability ?? 0;
+        smileChallengeList.add(smile);
+        final changed = hasSignificantTemporalVariation(smileChallengeList);
+
+        if (smile > 0.7 && changed) {
+          challengePassed = true;
+        }
+        break;
+
+      case LivenessChallenge.turnHeadLeft:
+        final headY = face.headEulerAngleY ?? 0;
+        headYChallengeList.add(headY);
+        final movedLeft = (_initialHeadY ?? 0) - headY > 10;
+        final moved = hasSignificantTemporalVariation(headYChallengeList);
+
+        if (moved && movedLeft) {
+          challengePassed = true;
+        }
+        break;
+
+      case LivenessChallenge.turnHeadRight:
+        final headY = face.headEulerAngleY ?? 0;
+        headYChallengeList.add(headY);
+        final movedRight = headY - (_initialHeadY ?? 0) > 10;
+        final moved = hasSignificantTemporalVariation(headYChallengeList);
+
+        if (moved && movedRight) {
+          challengePassed = true;
+        }
+        break;
+
+      case LivenessChallenge.leftEyeWink:
+        final left = face.leftEyeOpenProbability ?? 0;
+        leftEyeChallengeList.add(left);
+        final changed = hasSignificantTemporalVariation(leftEyeChallengeList);
+
+        if ((_initialLeftEye ?? 1.0) > 0.5 && left < 0.3 && changed) {
+          challengePassed = true;
+        }
+        break;
+
+      case LivenessChallenge.rightEyeWink:
+        final right = face.rightEyeOpenProbability ?? 0;
+        rightEyeChallengeList.add(right);
+        final changed = hasSignificantTemporalVariation(rightEyeChallengeList);
+
+        if ((_initialRightEye ?? 1.0) > 0.5 && right < 0.3 && changed) {
+          challengePassed = true;
+        }
+        break;
+    }
+
+    if (challengePassed) {
+      print("✔️ Challenge passed");
+      await takePhoto();
+      if (mounted) Navigator.pop(context, imgFile);
     }
   }
 
@@ -532,6 +511,19 @@ class _PassiveLivenessPageState extends State<PassiveLivenessPage> {
     leftEyeChallengeList.clear();
     rightEyeChallengeList.clear();
     headYChallengeList.clear();
+  }
+
+  void resetVerificationState() {
+    isVerifying = true;
+    verificationComplete = false;
+    verificationPassed = false;
+    verificationStartTime = DateTime.now();
+    smileList.clear();
+    leftEyeList.clear();
+    rightEyeList.clear();
+    headYList.clear();
+    headxList.clear();
+    headzList.clear();
   }
 
   @override
